@@ -1,13 +1,8 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package testjade;
 
 /**
  *
- * @author Abdelkader
+ * @author Julien SAUSSIER, Abdelkader ZEROUALI
  */
 import jade.core.AID;
 import jade.core.Agent;
@@ -17,34 +12,33 @@ import jade.core.behaviours.SequentialBehaviour;
 import jade.core.behaviours.SimpleBehaviour;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
-/**
- * envoie trois messages Request avec un comportement Ã un coup Ã 1 seconde
- * Inform Ã 2 secondes Confirm Ã 3 secondes
- *
- * @author mj
- */
+import static testjade.Constants.*;
+
 public class ProspectorAgent extends DefaultAgent {
-    
-    /**
-     * Mettre une liste d'agent
-     */
-
-    private static ACLMessage cfp = ;
-    private static ACLMessage reject = ;
-    private AID jim = ;
-    private AID lola = ;
-    private AID lily = ;
-
-    private List sellers = new ArrayList();
 
     private ACLMessage winner;
+    private String albumName;
 
-    private void setWinner(ACLMessage message) {
-        winner = message;
+    private String getAlbumName() {
+        return albumName;
+    }
+
+    private void setAlbumName(String albumName) {
+        this.albumName = albumName;
+    }
+
+    private void setAlbumName(Object[] args) {
+        if (args != null && args.length > 0) {
+            setAlbumName(String.valueOf(args[0]));
+        } else {
+            System.out.println("pas d'album spécifié" + getAID().getName());
+        }
+    }
+
+    private void setWinner(ACLMessage msg) {
+        winner = msg;
     }
 
     private ACLMessage getWinner() {
@@ -54,74 +48,86 @@ public class ProspectorAgent extends DefaultAgent {
     private boolean isWinnerId(AID agentId) {
         return winner.getSender() == agentId;
     }
-    //add a new seller
 
-    private boolean addSellers(AID agentId) {
-
-        return result;
+    private boolean addVendor(AID agentId) {
+        return vendors.add(agentId);
     }
-    //return the losers according the list of sellers and the final winner
+    
 
-    private List getLosers() {
-        List temp = ;
-        ...;
+    private List<AID> getLosers() {
+        List<AID> temp = vendors;
+        temp.remove(getWinner().getSender());
         return temp;
     }
 
     @Override
     protected void setup() {
         super.setup();
-        //initialize the list of sellers with lily, jim and lola
+        
+        setAlbumName(getArguments());
+        
+        addVendor(LILY);
+        addVendor(JIM);
+        addVendor(LOLA);
+        
+        ProspectBehaviour behaviour = new ProspectBehaviour(this);
 
-        //add the ProspectBehaviour
+        this.addBehaviour(new ProspectBehaviour(this));
     }
 
     class ParallelHandleBehaviour extends ParallelBehaviour {
 
-        private int min = 1000;
-        private ACLMessage current;
+        private float min = 1000.F;
+        private ACLMessage currentMsg;
 
-        //the winner propose the lower price 
-        //comparison between the current minimal price and the price argument
-        private boolean isWinner(int price) {
-            return ....;
-       }
+        //Comparaison prix min vs proposition
+        private boolean isWinner(float price) {
+            return price < min;
+        }
        
-       private void setCurrentWinner(ACLMessage message) {
-            current = message;
+       private void setCurrentWinnerMessage(ACLMessage currentMsg) {
+            this.currentMsg = currentMsg;
         }
 
-        private ACLMessage getCurrentWinner() {
-            return current;
+        private ACLMessage getCurrentWinnerMessage() {
+            return currentMsg;
         }
 
-        private void setMin(int value) {
+        private void setMin(float value) {
             min = value;
         }
 
-        private int getMin() {
+        private float getMin() {
             return min;
         }
 
         ParallelHandleBehaviour(Agent a) {
-            //the behaviour is done when all the sub behaviour are done;
-
-            //add the three sub behaviour which handle the propose message to 
-            //lily lola and jim
+            //A la fin de tous les comportements éléments en parallèles
+            //WHEN_ALL est passé en argument du constructeur
+            super(a, ParallelBehaviour.WHEN_ALL);
+            
+            for(AID vendor : vendors){
+                a.addBehaviour(new HandleProposeBehaviour(a, vendor));
+            }
         }
 
         @Override
         public int onEnd() {
-            System.out.println("onEnd::" + this.toString());
-            System.out.println("onEnd:: final winner " + getCurrentWinner());
-            //set the final winner
-
-            //return the final price
+            
+            
+            System.out.println("onEnd : " + this.toString());
+            System.out.println("onEnd : gagnant " + 
+                    getCurrentWinnerMessage().getSender().getName());
+            System.out.println("onEnd : prix final " + getCurrentWinnerMessage().getContent());
+            
+            //Renvoie du gagnant
+            ((ProspectorAgent) getAgent()).setWinner((getCurrentWinnerMessage()));
+            return (int)getMin();
         }
 
         private class MySimpleBehaviour extends SimpleBehaviour {
 
-            private boolean finished = false;
+            private boolean isFinished = false;
 
             public MySimpleBehaviour(Agent a) {
                 super(a);
@@ -129,16 +135,16 @@ public class ProspectorAgent extends DefaultAgent {
 
             @Override
             public void action() {
-                System.out.println("Behaviour name " + this.toString());
+                System.out.println("Comportement " + this.toString());
             }
 
             @Override
             public boolean done() {
-                return finished;
+                return isFinished;
             }
 
-            protected void finished() {
-                finished = true;
+            protected void isFinished() {
+                isFinished = true;
             }
 
             @Override
@@ -152,7 +158,7 @@ public class ProspectorAgent extends DefaultAgent {
 
             private AID receiver;
             private MessageTemplate template;
-            private MessageTemplate mtPropose = ...;
+            
             public HandleProposeBehaviour(Agent a, AID receiver) {
                 super(a);
                 setReceiver(receiver);
@@ -165,12 +171,10 @@ public class ProspectorAgent extends DefaultAgent {
             private AID getReceiver() {
                 return receiver;
             }
-            //initialise the template of the handled message
-            // sender is the receiver
-            //performative is mtPropose
 
             private void setTemplate() {
-
+                MessageTemplate msgTplSender = MessageTemplate.MatchSender(getReceiver());
+                template = MessageTemplate.and(PROPOSE_TPL, msgTplSender);
             }
 
             @Override
@@ -181,133 +185,150 @@ public class ProspectorAgent extends DefaultAgent {
 
             @Override
             public void action() {
-                System.out.println(" action:: handle propose " + this.toString());
-                ACLMessage receive =
-                ...;
+                System.out.println(" action : gestion de la proposition " + this.toString());
+                ACLMessage msgReceive = receive(template);
+      
                
-       if (receive != null) {
-                    handleMessage(receive);
-                    finished();
+                if (msgReceive != null) {
+                    handleMessage(msgReceive);
+                    isFinished();
                 } else {
-                    System.out.println(" behaviour blocked " + this.toString());
                     block();
                 }
             }
-            //handle the received message
-            //parse the content as a price (type int)
-            //if it is the winner (lower price)
-            // state as the winner
-            //otherwise println the current winner
-
-            private void handleMessage(ACLMessage message) {
-                System.out.println("handle propose message" + message);
-                ...
+            
+            //Lecture du message, vérification du prix
+            //mise à jour prix/gagnant
+            private void handleMessage(ACLMessage msg) {
+                System.out.println("Gestion du message de proposition " + msg);
+                int price = Integer.parseInt(msg.getContent());
                 if (isWinner(price)) {
-                    ..;
+                    setMin(price); 
+                    setCurrentWinnerMessage(msg);
+                    System.out.println("winner : " + msg);
+                    System.out.println("winner price: " + price);
                 } else {
-                    ...
+                    System.out.println("loser : " + msg);
+                    System.out.println("loser price: " + price);
                 }
             }
-        }//HandleProposeBehaviour
-    }//end ParallelHandleBehaviour
+        }
+    }
 
     class ProspectBehaviour extends SequentialBehaviour {
+
+        ACLMessage msgAlbum;
 
         ProspectBehaviour(Agent a) {
             super(a);
 
-            // l'ajout d'un one-shot behaviour pour envoyer un CFP 
+            // Envoie un call for propose aux trois vendeurs
             addSubBehaviour(new OneShotBehaviour(this.getAgent()) {
                 @Override
                 public void onStart() {
                     super.onStart();
-                    System.out.println("onStart:: Comportement   " + this.toString());
-                    //initialisze the CFP message
+                    System.out.println("onStart : Comportement oneshot  " + this.toString());
+                    msgAlbum = new ACLMessage(ACLMessage.CFP);
+                    
+                    msgAlbum.setContent(albumName);
+                    //Initialisisation de la performative CFP
+                    //msgAlbum.setPerformative(ACLMessage.CFP);
+
+                    //msgAlbum.setContent(albumName);
                 }
 
                 @Override
                 public void action() {
-                    System.out.println("action:: send cfp de l'agent " + this.getAgent());
-                    //send the cfp message
+                    System.out.println("action : envoie du CFP " + this.getAgent());
 
+                    send(msgAlbum);
                 }
             });
-            //add the ParallelHandleBehaviour
 
-            //add the ParallelChooseBehaviour
+            //Comportement parallèle qui reçoit en parallèle les trois messages propose et mets à jour à chaque réception de message le message gagnant (prix le plus bas).
+            //Le comportement se finit à la fin des comportements éléments
+            addSubBehaviour(new ParallelHandleBehaviour(this.getAgent()));
+
+            //Comportement parallèle qui permet d’envoyer un message d’acceptation au gagnant et un message de rejet aux perdants
+            addSubBehaviour(new ParallelChooseBehaviour(this.getAgent()));
         }
 
         @Override
         public int onEnd() {
-            System.out.println("onEnd:: fin activité de l'agent");
-            ...
-            return  
-    
+            System.out.println("onEnd : fin Prospector ");
 
-        
-    
+            return super.onEnd();
+        }
+    }
 
-    ...;
-         }
-     }//ProspectBehaviour
-    
-     class ParallelChooseBehaviour extends ParallelBehaviour {
+    //Comportement parallèle qui permet d’envoyer un message d’acceptation au gagnant et un message de rejet aux perdants
+    class ParallelChooseBehaviour extends ParallelBehaviour {
 
         ParallelChooseBehaviour(Agent a) {
-            //the behaviour is done when all the sub behaviour are done;
-
-            //add the two sub behaviour which send the accept and reject messages
+            //Ajout des subBehaviours
+            addSubBehaviour(new AcceptBehaviour(this.getAgent()));
+            addSubBehaviour(new RejectBehaviour(this.getAgent()));
         }
-    } //Parallel Choose behaviour
+    }
 
     class AcceptBehaviour extends OneShotBehaviour {
 
-        ACLMessage accept;
+        ACLMessage acptMsg;
 
         AcceptBehaviour(Agent a) {
             super(a);
-
         }
 
         @Override
         public void onStart() {
-            //initialize the accept message
+            acptMsg = getWinner().createReply();
 
-            System.out.println("onStart::accept-proposal " + accept);
+            acptMsg.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+
+            System.out.println("onStart : proposition acceptée " + acptMsg);
         }
 
         @Override
         public void action() {
-            System.out.println("action::send accept-proposal ");
-            //send the accept message
+            send(acptMsg);
+
+            System.out.println("action : envoie proposition acceptée ");
         }
     }
 
     class RejectBehaviour extends OneShotBehaviour {
 
+        ACLMessage rjctMsg;
+
         RejectBehaviour(Agent a) {
             super(a);
         }
-        // add the losers as the receiver of the reject message
-
-        private void addReceivers(List agents) {
+        
+        //Ajout des différents losers dans la liste d'envoie
+        private void addReceivers() {
+            List<AID> losers = getLosers();
+            for (AID loser : losers){
+                rjctMsg.addReceiver(loser);
+            }
             
+        }
+
+        @Override
+        public void onStart() {
+            addReceivers();
+
+            rjctMsg.setPerformative(ACLMessage.REJECT_PROPOSAL);
+
+            System.out.println("onStart : proposition rejetée " + rjctMsg);
+        }
+
+        @Override
+        public void action() {
+            send(rjctMsg);
+
+            System.out.println("action : envoie proposition rejetée ");
+
         }
     }
 
-    @Override
-    public void onStart() {
-        //initialize the reject message
-
-        System.out.println("onStart::reject-proposal " + reject);
-    }
-
-    @Override
-    public void action() {
-        System.out.println("action::send reject-proposal ");
-        //send the reject message
-
-    }
 }
-
-}//end class

@@ -1,17 +1,9 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package testjade;
 
 import jade.core.Agent;
 import jade.core.behaviours.FSMBehaviour;
-import jade.core.behaviours.CyclicBehaviour;
 import jade.core.behaviours.OneShotBehaviour;
 import jade.core.behaviours.SimpleBehaviour;
-import jade.core.AID;
-import jade.core.Agent;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
 
@@ -19,13 +11,13 @@ import static testjade.Constants.*;
 
 /**
  *
- * @author Abdelkader
+ * @author Julien SAUSSIER, Abdelkader ZEROUALI
  */
 public class FSMArgumentAgent extends DefaultAgent{
 
     //Message courant
     private  ACLMessage message ;
-    private float price=1000.F;    
+    private float price;  
     
     @Override
     protected void setup(){
@@ -41,18 +33,18 @@ public class FSMArgumentAgent extends DefaultAgent{
     private void setMessage(ACLMessage message){
        this.message=message;
     }
-     private float getPrice(){
+    private float getPrice(){
        return price;
     }
-    private void setPrice(float value){
-       this.price=value;
+    private void setPrice(float price){
+       this.price = price;
     }
     private void setPrice(Object[] args){
        if(args!= null && args.length>0){
-           setPrice((float)args[0]);
+           setPrice(Float.valueOf(String.valueOf(args[0])));
        }
        else {
-           System.out.println("no price specified" + getAID().getName());
+           System.out.println("aucun prix spécifié" + getAID().getName());
        }
     }
     
@@ -66,118 +58,135 @@ public class FSMArgumentAgent extends DefaultAgent{
         public void onStart() {
             super.onStart(); 
             
-            //Ajout du HandleMessageBehaviour en tant que premier état
-            this.registerFirstState(new HandleMessageBehaviour(this.getAgent()), "WAITING");
-            //Ajout du SendMessageBehaviour en tant qu'état intermédiaire
-            this.registerState(new SendMessageBehaviour(this.getAgent()), "PROPOSING");
-            //Ajout du WinnerBehaviour en tant que dernier état
-            this.registerLastState(new WinnerBehaviour(this.getAgent()), "WINNER");
-            //Ajout du LoserBehaviour en tant que dernier état
-            this.registerLastState(new LoserBehaviour(this.getAgent()), "LOSER");
+            //Premier état - Attente message
+            this.registerFirstState(new HandleMessageBehaviour(this.getAgent()), "ATTENTE");
+            
+            //Etat propose
+            this.registerState(new SendMessageBehaviour(this.getAgent()), "PROPOSITION");
+            
+            //Etat message gagnant
+            this.registerLastState(new WinnerBehaviour(this.getAgent()), "GAGNANT");
+            
+            //Etat message perdant
+            this.registerLastState(new LoserBehaviour(this.getAgent()), "PERDANT");
+            
             //Transitions
-            this.registerTransition("WAITING", "PROPOSING", ACLMessage.CFP);
-            this.registerTransition("WAITING", "WINNER", ACLMessage.ACCEPT_PROPOSAL);
-            this.registerTransition("WAITING", "LOSER", ACLMessage.REJECT_PROPOSAL);
+            this.registerTransition("ATTENTE", "PROPOSITION", ACLMessage.CFP);
+            this.registerTransition("ATTENTE", "GAGNANT", ACLMessage.ACCEPT_PROPOSAL);
+            this.registerTransition("ATTENTE", "PERDANT", ACLMessage.REJECT_PROPOSAL);
+            
             //Transition par défaut
-            this.registerDefaultTransition("PROPOSING", "WAITING", new String[]{"WAITING", "PROPOSING"});    
+            this.registerDefaultTransition("PROPOSITION", "ATTENTE", new String[]{"ATTENTE", "PROPOSITION"});    
             addBehaviour(this);
         }
         
         
-
+        //Traite les messages et retourne à la fin de son activité le performatif reçu
         private class HandleMessageBehaviour extends SimpleBehaviour {
             
-            MessageTemplate template;
-            boolean finished;
+            MessageTemplate tpl;
+            boolean isFinished;
             
-            //Constructeur
             HandleMessageBehaviour(Agent a) {
                 super(a);
             }
             
             @Override
             public void onStart() {
-                System.out.println("onStart:: Beginning Handled " + toString());
                 
-                //initialisation du template par rapport aux templates prédéfinis
-                template = MessageTemplate.or(TEMPLATE_CFP, TEMPLATE_ACCEPT);
-                template = MessageTemplate.or(template, TEMPLATE_REJECT);
+                System.out.println("onStart : début " + toString());
+                   
+                tpl = MessageTemplate.or(CFP_TPL, ACCEPT_TPL);
+                
+                tpl = MessageTemplate.or(tpl, REJECT_TPL);
             }
 
             @Override
             public void action() {
-                ACLMessage message;
-                message = blockingReceive(template);
-                if(message != null){
-                    doMessage(message);
+                ACLMessage msg;
+                
+                //A new ACL message, blocking the agent until one is available.
+                msg = blockingReceive(tpl);
+                
+                if(msg != null){
+                    doReiceve(msg);
                 } else {
-                    System.out.println("block");
                     block();               
                 }
-                System.out.print("HANDLE MESSAGE :" + getMessage().getContent() + " Destinataire : " + myAgent.getAID().getName());
+                
+                System.out.print("Gestion du message :" + getMessage().getContent() + " Destinataire : " + myAgent.getAID().getName());
             }
             
-            public void doMessage(ACLMessage message){
-                setMessage(message);
+            protected void doReiceve(ACLMessage msg){
+                setMessage(msg);
             }
             
             @Override
             public int onEnd() {
-                System.out.println("onEnd:: Performative Handled " + getMessage().getPerformative());
-                finished = true;
+                isFinished = true;
+                
+                System.out.println("onEnd : fin de la performative " + getMessage().getPerformative());
+                
                 return getMessage().getPerformative();
             }
             
             @Override
             public boolean done() {
-                return finished;
+                return isFinished;
             }
             
         }
         
+        //Fait une proposition à l’envoyeur du message CFP avec le prix qui a été passé en argument à la création de l’agent
         private class SendMessageBehaviour extends OneShotBehaviour {
-            ACLMessage reply;
+            ACLMessage rep;
             public SendMessageBehaviour(Agent a) {
                 super(a);
             }
 
             @Override
-            public void onStart() {
-                //super.onStart();
-                System.out.println("onStart:: Beginning proposal " + toString());               
-                reply = getMessage().createReply(); 
-                reply.setPerformative(ACLMessage.PROPOSE);
-                reply.setContent(String.valueOf(getPrice()));
+            public void onStart() {               
+                rep = getMessage().createReply(); 
+                
+                rep.setPerformative(ACLMessage.PROPOSE);
+                
+                rep.setContent(String.valueOf(getPrice()));
+                
+                System.out.println("onStart : début de la proposition " + toString());
             }
             
             @Override
-            public void action() {
-                //Envoi de la reponse
-                System.out.println("action:: envoi du message propose par l'agent " + myAgent.getName() + " : " +  reply.toString());
-                send(reply);
+            public void action() {                
+                send(rep);
+                
+                System.out.println("action : envoie proposition " + myAgent.getName() + " : " +  rep.toString());
             }
             
             @Override
             public int onEnd(){
-                System.out.println("onEnd:: Performative Proposal " + message.getPerformative());
+                System.out.println("onEnd : fin performative proposition " + message.getPerformative());
+                
                 return super.onEnd();
             }          
         }
         
+        //Classe abstraite Winner/Loser
         private abstract class MyFinalBehaviour extends OneShotBehaviour {
             
             public MyFinalBehaviour(Agent a){
                 super(a);
             }
             
+            public abstract String result();
+                        
             @Override
             public void action(){
                 System.out.println(result() + myAgent.getAID());
             }
             
-            public abstract String result();
         }
         
+        //État terminal Imprime le message gagnant
         public class WinnerBehaviour extends MyFinalBehaviour {
 
             public WinnerBehaviour(Agent a) {
@@ -186,12 +195,13 @@ public class FSMArgumentAgent extends DefaultAgent{
 
             @Override
             public String result() {
-                return "Winner :";
+                return "Gagnant : ";
             }
             
             
         }
         
+        //Etat terminal imprime le message perdant
         public class LoserBehaviour extends MyFinalBehaviour {
 
             public LoserBehaviour(Agent a) {
@@ -200,7 +210,7 @@ public class FSMArgumentAgent extends DefaultAgent{
             
             @Override
             public String result() {
-                return "Loser :";
+                return "Perdant : ";
             }           
         }     
     }   
